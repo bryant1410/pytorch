@@ -513,19 +513,10 @@ class Module(object):
         tracing_state = torch._C._get_tracing_state()
         if not tracing_state:
             return self.forward(*input, **kwargs)
-        if not hasattr(tracing_state, '_traced_module_stack'):
-            tracing_state._traced_module_stack = []
-        name = self._tracing_name(tracing_state)
-        if name:
-            tracing_state.push_scope('%s[%s]' % (self._get_name(), name))
-        else:
-            tracing_state.push_scope(self._get_name())
-        tracing_state._traced_module_stack.append(self)
-        try:
-            result = self.forward(*input, **kwargs)
-        finally:
-            tracing_state.pop_scope()
-            tracing_state._traced_module_stack.pop()
+        script_mod = torch.jit._hack_traced_module_map[self]
+        lookup_fn = torch.jit._create_interpreter_name_lookup_fn(0)
+        result = script_mod._c._create_method_from_trace('forward', self.forward, input, lookup_fn, False)
+        result = script_mod._c._get_method('forward')(*input)
         return result
 
     def __call__(self, *input, **kwargs):
